@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browser-agent"
+version = "0.1.0"
+description = "A2E browser agent: drives a browser-env host over the env/tools capabilities (browser_agent namespace)"
+requires-python = ">=3.10"
+dependencies = [
+    "a2e-python-sdk",
+    "pydantic>=2",
+    "pyyaml",
+    "requests",   # HTTPTransport speaks requests
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["browser_agent*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+browser_agent = ["*.yaml", "*.yml"]
+
+[tool.uv.sources]
+# Local checkout of the protocol SDK — the ONLY package this repo shares with
+# browser-env. Honoured by `uv sync`; for pip/uv-pip install it explicitly
+# first (see the Makefile `venv` target).
+a2e-python-sdk = { path = "../a2eprotocol/python-sdk", editable = true }
+
+[project.scripts]
+browser-agent = "browser_agent.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 120

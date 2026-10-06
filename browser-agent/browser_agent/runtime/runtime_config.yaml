@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Runtime config — AGENT side (browser_agent)
+#
+# Lives WITH THE RUNTIME, at browser-agent/browser_agent/runtime/runtime_config.yaml.
+# It is consumed by whatever constructs BrowserAgentRuntime (the CLI, tests, a
+# gateway) to:
+#   - build the provider-independent LLM (build_provider)
+#   - set the agent's advertised capability list (agent_caps)
+#   - set the system prompt and loop budget
+#
+# It is intentionally SEPARATE from the host config
+# (browser-env/browser_env/host_config.yaml), which is a pure A2EHostConfig and
+# cannot carry agent-side keys. The two are linked in CODE by the agent runtime,
+# never embedded in one file.
+# ─────────────────────────────────────────────────────────────────────────
+
+# Agent-side LLM config. `provider_name: stub` is fully offline (used by tests);
+# any other provider_name is an OpenAI-compatible endpoint.
+llm:
+  provider_name: stub
+  # Real providers (OpenRouter / vLLM / Ollama / LM Studio / xa-llm-provider):
+  #   api_credentials: "${OPENROUTER_API_KEY}"   # ${VAR} resolved at load time
+  #   chat_model: "${OPENROUTER_MODEL}"
+  #   base_url: "https://openrouter.ai/api/v1/"
+  # The env browser is headless, so a vision-capable model is optional: page
+  # text + the indexed element list is enough to drive most tasks.
+  api_credentials: ""
+  chat_model: ""
+  base_url: ""
+
+# Capabilities the agent advertises to the host at connect time. `tools` lets
+# the agent call the host's browser_* tools directly; `env` is the episode
+# surface (reset/step/observe/close) which drives all actions while open.
+agent_caps:
+  - env
+  - tools
+
+# System prompt prepended to every REACT turn. Keep the two hard rules here:
+# start an episode before acting, and finish it when the goal is met — the
+# episode's score is the only thing that measures success.
+system_prompt: >-
+  You are a browser-use agent operating a real headless browser through tools.
+
+  Hard rules:
+  1. Call env_start (with a `task` name from browser_tasks — the local
+     dataset, whose full spec is sent to the host — or a `start_url`)
+     BEFORE any browser tool. Without an open episode your actions are rejected.
+  2. Re-orient after every action with browser_text: each element carries a
+     stable `index` you should click by (prefer `index` over `selector`).
+  3. Call env_finish when the goal is met or you cannot make progress. The
+     environment scores the episode; a run that never finishes scores 0.
+  4. Prefer the fewest steps. Do not screenshot unless you need visual detail.
+
+# Loop budget: how many REACT iterations a single request may take.
+max_steps: 12
+
+# Observation shaping (compact what the LLM sees).
+observation:
+  chars: 4000
+  elements: 40
+
+# Host orchestration — where the SEPARATE browser-env container lives. The agent
+# never imports browser_env; it connects over HTTP (base_url) and, if nothing is
+# listening, spawns the container from docker_image (docker-only coupling).
+host:
+  base_url: "http://localhost:8770"
+  health_path: "/health"
+  # Image to run when spawning. Build with:  make -C browser-env build
+  docker_image: "browser-env:latest"
+  # Optional: mount a host config into the container (must be absolute, or
+  # relative to this file's directory).
+  config_path: ""
